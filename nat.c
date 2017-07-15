@@ -69,6 +69,20 @@
 #endif /* HAVE_NETFILTER */
 
 
+#ifdef HAVE_TRUSTBASE
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#ifdef __APPLE__
+#ifndef SOL_IP
+#define SOL_IP IPPROTO_IP
+#endif
+#ifndef IP_ORIGDSTADDR
+#define IP_ORIGDSTADDR 20
+#endif
+#endif
+#endif /* HAVE_TRUSTBASE */
+
+
 /*
  * Access NAT state tables in a NAT engine independant way.
  * Adding support for additional NAT engines should require only
@@ -388,6 +402,61 @@ nat_getsockname_lookup_cb(struct sockaddr *dst_addr, socklen_t *dst_addrlen,
 }
 #endif
 
+/*
+ * TrustHub
+ */
+
+#ifdef HAVE_TRUSTBASE
+#define TRUSTBASE_ORIG_DST	85
+static void
+log_dbg_printf_addr(struct sockaddr *addr)
+{
+	/* Make sure there's enough room for IPv6 addresses */
+	char str[INET6_ADDRSTRLEN];
+	unsigned long ip_addr;
+	struct in6_addr ip6_addr;
+	int port;
+	if (addr->sa_family == AF_INET) {
+		ip_addr = ((struct sockaddr_in*)addr)->sin_addr.s_addr;
+		inet_ntop(AF_INET, &ip_addr, str, INET_ADDRSTRLEN);
+		port = (int)ntohs(((struct sockaddr_in*)addr)->sin_port);
+	} else {
+		ip6_addr = ((struct sockaddr_in6*)addr)->sin6_addr;
+		inet_ntop(AF_INET6, &ip6_addr, str, INET6_ADDRSTRLEN);
+		port = (int)ntohs(((struct sockaddr_in6*)addr)->sin6_port);
+	}
+	log_dbg_printf("%s:%d\n", str, port);
+	return;
+}
+
+/*
+ * TrustBase will have set the IP_ORIGDSTADDR option on proxied connections.
+ */
+static int
+nat_trustbase_lookup_cb(struct sockaddr *dst_addr, socklen_t *dst_addrlen,
+                        evutil_socket_t s,
+                        struct sockaddr *src_addr,
+                        UNUSED socklen_t src_addrlen)
+{
+	int rv;
+
+	rv = getsockopt(s, IPPROTO_IP, TRUSTBASE_ORIG_DST, dst_addr, dst_addrlen);
+	if (rv == -1) {
+		log_err_printf("Error from getsockopt(TRUSTBASE_ORIG_DST): %s\n", 
+		               strerror(errno));
+	}
+
+	// Debug information for the proxied ip address.
+	log_dbg_printf("Source:");
+	log_dbg_printf_addr(src_addr);
+	
+	log_dbg_printf("Original Destination:");
+	log_dbg_printf_addr(dst_addr);
+	return rv;
+}
+
+#endif /* HAVE_TRUSTBASE */
+
 
 /*
  * NAT engine glue code and API.
@@ -408,6 +477,13 @@ struct engine {
 };
 
 struct engine engines[] = {
+#ifdef HAVE_TRUSTBASE
+	{
+		"trustbase", 1, 0,
+		NULL, NULL, NULL,
+		nat_trustbase_lookup_cb, NULL
+	},
+#endif /* HAVE_TRUSTBASE */
 #ifdef HAVE_PF
 	{
 		"pf", 1, 0,

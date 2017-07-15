@@ -136,6 +136,9 @@ ifneq ($(wildcard /usr/include/linux/netfilter.h),)
 FEATURES+=	-DHAVE_NETFILTER
 endif
 
+# Add TrustBase support
+FEATURES+=	-DHAVE_TRUSTBASE
+
 
 ### Variables you might need to override
 
