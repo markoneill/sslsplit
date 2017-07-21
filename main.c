@@ -901,11 +901,11 @@ main(int argc, char *argv[])
 			log_dbg_printf("Detaching from TTY, see syslog for "
 			               "errors after this point\n");
 		}
-		if (daemon(0, 0) == -1) {
+		/*if (daemon(0, 0) == -1) {
 			fprintf(stderr, "%s: failed to detach from TTY: %s\n",
 			                argv0, strerror(errno));
 			exit(EXIT_FAILURE);
-		}
+		}*/
 		log_err_mode(LOG_ERR_MODE_SYSLOG);
 	}
 
