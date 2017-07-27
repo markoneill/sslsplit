@@ -7,6 +7,7 @@
 #
 # OPENSSL_BASE	Prefix of OpenSSL library and headers to build against
 # LIBEVENT_BASE	Prefix of libevent library and headers to build against
+# LIBNL_BASE	Prefix of libnl3 library and headers to build against
 # CHECK_BASE	Prefix of check library and headers to build against (optional)
 # PKGCONFIG	Name/path of pkg-config program to use for auto-detection
 # PCFLAGS	Additional pkg-config flags
@@ -235,6 +236,12 @@ ifndef CHECK_BASE
 TPKGS+=		$(shell $(PKGCONFIG) $(PCFLAGS) --exists check \
 		&& echo check)
 endif
+ifndef LIBNL_BASE
+PKGS+=		$(shell $(PKGCONFIG) $(PCFLAGS) --exists libnl-3.0 \
+		&& echo libnl-3.0)
+PKGS+=		$(shell $(PKGCONFIG) $(PCFLAGS) --exists libnl-genl-3.0 \
+		&& echo libnl-genl-3.0)
+endif
 
 # Autodetect dependencies not known to pkg-config
 ifeq (,$(filter openssl,$(PKGS)))
@@ -288,6 +295,23 @@ CHECK_MISSING:=	1
 endif
 endif
 
+ifeq (,$(filter libnl-3.0,$(PKGS)))
+LIBNL_PAT:=	include/netlink/netlink.h
+ifdef LIBNL_BASE
+LIBNL_FIND:=	$(wildcard $(LIBNL_BASE)/$(LIBNL_PAT))
+else
+LIBNL_FIND:=	$(wildcard \
+		/opt/local/$(LIBNL_PAT) \
+		/usr/local/$(LIBNL_PAT) \
+		/usr/$(LIBNL_PAT))
+endif
+LIBNL_AVAIL:=	$(LIBNL_FIND:/$(LIBNL_PAT)=)
+LIBNL_FOUND:=	$(word 1,$(LIBNL_AVAIL))
+ifndef LIBNL_FOUND
+LIBNL_MISSING:=	1
+endif
+endif
+
 ifdef OPENSSL_FOUND
 PKG_CPPFLAGS+=	-I$(OPENSSL_FOUND)/include
 PKG_LDFLAGS+=	-L$(OPENSSL_FOUND)/lib
@@ -308,6 +332,11 @@ ifdef CHECK_FOUND
 TPKG_CPPFLAGS+=	-I$(CHECK_FOUND)/include
 TPKG_LDFLAGS+=	-L$(CHECK_FOUND)/lib
 TPKG_LIBS+=	-lcheck
+endif
+ifdef LIBNL_FOUND
+PKG_CPPFLAGS+=	-I$(LIBNL_FOUND)/include
+PKG_LDFLAGS+=	-L$(LIBNL_FOUND)/lib
+PKG_LIBS+=	-lnl-3 -lnl-genl-3
 endif
 
 ifneq (,$(strip $(PKGS)))
@@ -373,6 +402,9 @@ endif
 ifdef CHECK_FOUND
 $(info CHECK_BASE:     $(strip $(CHECK_FOUND)))
 endif
+ifdef LIBNL_FOUND
+$(info LIBNL_BASE:     $(strip $(LIBNL_FOUND)))
+endif
 $(info Build options:  $(FEATURES))
 ifeq ($(shell uname),Darwin)
 $(info OSX_VERSION:    $(OSX_VERSION))
@@ -393,6 +425,10 @@ version.o: version.c version.h GNUmakefile $(VFILE) FORCE
 ifdef CHECK_MISSING
 	$(error unit test dependency 'check' not found; \
 	install it or point CHECK_BASE to base path)
+endif
+ifdef LIBNL_MISSING
+	$(error unit test dependency 'libnl' not found; \
+	install it or point LIBNL_BASE to base path)
 endif
 	$(CC) -c $(CPPFLAGS) $(TCPPFLAGS) $(CFLAGS) $(TPKG_CFLAGS) -o $@ \
 		-x c $<

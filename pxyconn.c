@@ -26,6 +26,8 @@
  */
 
 #include "pxyconn.h"
+#include "netlink.h"
+
 
 #include "pxysslshut.h"
 #include "cachemgr.h"
@@ -310,6 +312,24 @@ static int pxy_ossl_servername_cb(SSL *ssl, int *al, void *arg);
 static int pxy_ossl_sessnew_cb(SSL *, SSL_SESSION *);
 static void pxy_ossl_sessremove_cb(SSL_CTX *, SSL_SESSION *);
 static SSL_SESSION * pxy_ossl_sessget_cb(SSL *, unsigned char *, int, int *);
+
+/* use TrustBase to verify certificates */
+static int
+cert_verify_callback(X509_STORE_CTX *x509_ctx, void *arg) {
+	int result;
+	char* hostname = (char*)arg;
+	X509_verify_cert(x509_ctx);
+	STACK_OF(X509) *chain = X509_STORE_CTX_get1_chain(x509_ctx);
+	uint64_t query_id = 1;
+	trustbase_connect();
+	send_query_openssl(query_id, hostname, 443, chain);
+	result = recv_response() > 0 ? 1 : 0;
+	trustbase_disconnect();
+
+	sk_X509_pop_free(chain, X509_free);    
+	return result;
+}
+
 
 /*
  * Dump information on a certificate to the debug log.
@@ -1088,7 +1108,10 @@ pxy_dstssl_create(pxy_conn_ctx_t *ctx)
 
 	pxy_sslctx_setoptions(sslctx, ctx);
 
-	SSL_CTX_set_verify(sslctx, SSL_VERIFY_NONE, NULL);
+	/* Under TrustBase, we do want to do some certificate checks */
+	//SSL_CTX_set_verify(sslctx, SSL_VERIFY_NONE, NULL);
+	SSL_CTX_set_verify(sslctx, SSL_VERIFY_PEER, NULL);
+	SSL_CTX_set_cert_verify_callback(sslctx, cert_verify_callback, (void *) ctx->sni);
 
 	ssl = SSL_new(sslctx);
 	SSL_CTX_free(sslctx); /* SSL_new() increments refcount */

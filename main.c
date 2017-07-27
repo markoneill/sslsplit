@@ -942,12 +942,12 @@ main(int argc, char *argv[])
 	}
 
 	/* Drop privs, chroot */
-	if (sys_privdrop(opts->dropuser, opts->dropgroup,
+	/*if (sys_privdrop(opts->dropuser, opts->dropgroup,
 	                 opts->jaildir) == -1) {
 		log_err_printf("Failed to drop privileges: %s (%i)\n",
 		               strerror(errno), errno);
 		exit(EXIT_FAILURE);
-	}
+	}*/
 	ssl_reinit();
 
 	/* Post-privdrop/chroot/detach initialization, thread spawning */
